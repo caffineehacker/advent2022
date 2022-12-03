@@ -15,7 +15,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let file = File::open(args.data_file).expect("Failed to open file");
+    let file = File::open(&args.data_file).expect("Failed to open file");
     let reader = BufReader::new(file);
 
     let priority_sum: u32 = reader
@@ -25,7 +25,32 @@ fn main() {
         .map(item_priority)
         .sum();
 
-    println!("Total priority: {}", priority_sum);
+    println!("Part 1 total priority: {}", priority_sum);
+
+    let file = File::open(&args.data_file).expect("Failed to open file");
+    let reader = BufReader::new(file);
+
+    let mut current_elves = Vec::new();
+    let mut part2_priority_total = 0;
+    for line in reader.lines() {
+        current_elves.push(line.expect("Failed to get line"));
+        if current_elves.len() == 3 {
+            let repeated_item = *current_elves
+                .iter()
+                .map(|e| e.chars().collect::<HashSet<char>>())
+                .reduce(|a, e| a.intersection(&e).map(|c| *c).collect::<HashSet<char>>())
+                .expect("Failed to find repeated item")
+                .iter()
+                .last()
+                .expect("No repeated item found");
+
+            part2_priority_total += item_priority(repeated_item);
+
+            current_elves = Vec::new();
+        }
+    }
+
+    println!("Part 2 total priority: {}", part2_priority_total);
 }
 
 fn find_repeated_item(backpack: String) -> char {
@@ -45,10 +70,8 @@ fn item_priority(item: char) -> u32 {
     // A-Z are 27-52
 
     if item.is_ascii_uppercase() {
-        println!("{}: {}", item, u32::from(item) - u32::from('A') + 1);
         return u32::from(item) - u32::from('A') + 27;
     }
 
-    println!("{}: {}", item, u32::from(item) - u32::from('a') + 1);
     u32::from(item) - u32::from('a') + 1
 }
