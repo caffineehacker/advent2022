@@ -2,4 +2,4 @@ A Y
 B X
 C Z
 A Z
-Z A
+C X
