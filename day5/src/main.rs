@@ -9,10 +9,13 @@ use std::{
 struct Args {
     #[arg(long)]
     data_file: String,
+    #[arg(long)]
+    part: u32,
 }
 
 fn main() {
     let args = Args::parse();
+    let part_number = args.part;
 
     let file = File::open(&args.data_file).expect("Failed to open file");
     let reader = BufReader::new(file);
@@ -43,7 +46,7 @@ fn main() {
     // A move is listed as "move N from A to B"
     for line in lines.iter().skip_while(|line| !line.is_empty()).skip(1) {
         let components: Vec<&str> = line.split_whitespace().collect();
-        let mut count: u32 = components
+        let mut count: usize = components
             .get(1)
             .unwrap()
             .parse()
@@ -59,10 +62,21 @@ fn main() {
             .parse()
             .expect("Failed to parse to");
 
-        while count > 0 {
-            count -= 1;
-            let item = stacks.get_mut(from_index - 1).unwrap().pop().unwrap();
-            stacks.get_mut(to_index - 1).unwrap().push(item);
+        if part_number == 1 {
+            while count > 0 {
+                count -= 1;
+                let item = stacks.get_mut(from_index - 1).unwrap().pop().unwrap();
+                stacks.get_mut(to_index - 1).unwrap().push(item);
+            }
+        } else {
+            let from_stack = stacks.get_mut(from_index - 1).unwrap();
+            let mut items: Vec<String> = {
+                let (_, items) = from_stack.split_at(from_stack.len() - count);
+                items.into_iter().map(|item| item.clone()).collect()
+            };
+            from_stack.truncate(from_stack.len() - count);
+            let to_stack = stacks.get_mut(to_index - 1).unwrap();
+            to_stack.append(&mut items);
         }
     }
 
