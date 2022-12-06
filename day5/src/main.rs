@@ -39,6 +39,33 @@ fn main() {
         }
     }
 
+    // Now that we have the initial stacks, lets execute the moves
+    // A move is listed as "move N from A to B"
+    for line in lines.iter().skip_while(|line| !line.is_empty()).skip(1) {
+        let components: Vec<&str> = line.split_whitespace().collect();
+        let mut count: u32 = components
+            .get(1)
+            .unwrap()
+            .parse()
+            .expect("Failed to parse count");
+        let from_index: usize = components
+            .get(3)
+            .unwrap()
+            .parse()
+            .expect("Failed to parse from");
+        let to_index: usize = components
+            .get(5)
+            .unwrap()
+            .parse()
+            .expect("Failed to parse to");
+
+        while count > 0 {
+            count -= 1;
+            let item = stacks.get_mut(from_index - 1).unwrap().pop().unwrap();
+            stacks.get_mut(to_index - 1).unwrap().push(item);
+        }
+    }
+
     for c in 0..column_count {
         print!("{}: ", c);
         for item in stacks.get(c).unwrap().iter() {
