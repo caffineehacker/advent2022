@@ -99,12 +99,26 @@ fn main() {
     }
 
     print_directory(&root.borrow(), 0);
-    let total_under_limit: u32 = get_all_directories(root)
+    let total_under_limit: u32 = get_all_directories(root.clone())
         .iter()
         .map(|d| d.borrow().size)
         .filter(|s| *s <= 100000)
         .sum();
     println!("Sum of directories <= 100000: {}", total_under_limit);
+
+    // Part 2:
+    let total_drive_size = 70000000;
+    let required_free_space = 30000000;
+    let current_free_space = total_drive_size - root.borrow().size;
+    let required_additional_free_space = required_free_space - current_free_space;
+
+    let space_to_free = get_all_directories(root.clone())
+        .iter()
+        .map(|d| d.borrow().size)
+        .filter(|s| *s >= required_additional_free_space)
+        .min()
+        .unwrap();
+    println!("Will need to free a directory of size {}", space_to_free);
 }
 
 fn get_all_directories(root: Rc<RefCell<Directory>>) -> Vec<Rc<RefCell<Directory>>> {
