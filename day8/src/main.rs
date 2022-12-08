@@ -51,6 +51,79 @@ fn main() {
         .sum();
 
     println!("Number of visible trees: {}", number_of_visibile_trees);
+
+    // Part 2 is finding the highest scenic score
+    let left_scenic_table = get_left_scenic(&data);
+    let right_scenic_table = get_left_scenic(
+        &data
+            .iter()
+            .map(|row| row.iter().rev().cloned().collect())
+            .collect(),
+    )
+    .iter()
+    .map(|row| row.iter().rev().cloned().collect())
+    .collect();
+    let top_scenic_table = transpose(&get_left_scenic(&transpose(&data)));
+    let bottom_scenic_table = transpose(
+        &get_left_scenic(
+            &transpose(&data)
+                .iter()
+                .map(|row| row.iter().rev().cloned().collect())
+                .collect(),
+        )
+        .iter()
+        .map(|row| row.iter().rev().cloned().collect())
+        .collect(),
+    );
+    let scenic_tables = vec![
+        &left_scenic_table,
+        &right_scenic_table,
+        &top_scenic_table,
+        &bottom_scenic_table,
+    ];
+    let best_scenary_score = (0..left_scenic_table.len())
+        .flat_map(|x| {
+            let x = &x;
+            (0..left_scenic_table[0].len())
+                .map(|y| {
+                    let x = *x;
+                    scenic_tables
+                        .iter()
+                        .map(|t| t[x][y])
+                        .reduce(|acc, score| acc * score)
+                        .unwrap()
+                })
+                .collect::<Vec<_>>()
+        })
+        .max()
+        .unwrap();
+
+    println!("Best scenic score: {}", best_scenary_score);
+}
+
+fn get_left_scenic(data: &Vec<Vec<i16>>) -> Vec<Vec<usize>> {
+    data.iter()
+        .map(|row| {
+            row.iter()
+                .enumerate()
+                .map(|(index, tree)| {
+                    if index == 0 {
+                        return 0;
+                    }
+
+                    let visible_count = row[0..index]
+                        .iter()
+                        .rev()
+                        .take_while(|t| **t < *tree)
+                        .count();
+                    if visible_count != index {
+                        return visible_count + 1;
+                    }
+                    visible_count
+                })
+                .collect::<Vec<usize>>()
+        })
+        .collect()
 }
 
 fn get_left_visible(data: &Vec<Vec<i16>>) -> Vec<Vec<bool>> {
