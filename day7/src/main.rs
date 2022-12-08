@@ -3,7 +3,7 @@ use std::{
     cell::RefCell,
     fs::File,
     io::{BufRead, BufReader},
-    rc::{Rc, Weak},
+    rc::Rc,
 };
 
 #[derive(Parser, Debug)]
@@ -23,6 +23,7 @@ struct Directory {
     name: String,
     sub_directories: Vec<Rc<RefCell<Directory>>>,
     files: Vec<SantaFile>,
+    size: u32,
 }
 
 fn main() {
@@ -59,10 +60,19 @@ fn main() {
                             directory_name,
                         ));
                     }
+
+                    // println!(
+                    //     "Entering {}",
+                    //     breadcrumbs
+                    //         .iter()
+                    //         .map(|d| d.borrow().name.clone())
+                    //         .reduce(|acc, d| acc + "/" + &d)
+                    //         .unwrap()
+                    // );
                 }
                 "ls" => {
                     // All lines until a $ line are file listings
-                    let current_directory = breadcrumbs.last().unwrap();
+                    let current_directory = breadcrumbs.last().unwrap().clone();
                     while index + 1 < lines.len() && !lines.get(index + 1).unwrap().starts_with("$")
                     {
                         index += 1;
@@ -70,10 +80,14 @@ fn main() {
                         if size == "dir" {
                             get_or_create_subdir(current_directory.clone(), name);
                         } else {
+                            let file_size: u32 = size.parse().unwrap();
                             current_directory.borrow_mut().files.push(SantaFile {
                                 name: name.to_string(),
-                                size: size.parse().unwrap(),
+                                size: file_size,
                             });
+                            breadcrumbs
+                                .iter_mut()
+                                .for_each(|b| b.borrow_mut().size += file_size);
                         }
                     }
                 }
@@ -85,6 +99,25 @@ fn main() {
     }
 
     print_directory(&root.borrow(), 0);
+    let total_under_limit: u32 = get_all_directories(root)
+        .iter()
+        .map(|d| d.borrow().size)
+        .filter(|s| *s <= 100000)
+        .sum();
+    println!("Sum of directories <= 100000: {}", total_under_limit);
+}
+
+fn get_all_directories(root: Rc<RefCell<Directory>>) -> Vec<Rc<RefCell<Directory>>> {
+    let mut results = Vec::new();
+    let mut to_process = vec![root];
+
+    while !to_process.is_empty() {
+        let directory = to_process.pop().unwrap();
+        to_process.append(&mut directory.borrow().sub_directories.clone());
+        results.push(directory.clone());
+    }
+
+    results
 }
 
 fn print_directory(directory: &Directory, space_depth: u32) {
