@@ -72,12 +72,14 @@ fn main() {
     };
 
     // The text is odd because we want the X value DURING the cycle which is actually the value after the previous cycle.
-    vm.nth(17);
+    // Adding 18 brings us to the 19th cycle so the call to next() will give the 20th cycle.
+    vm.nth(18);
     let mut total = 0;
     for i in 0..6 {
         let result = vm.next();
+        // Adding 38 will increase the iterator by 39 when combined with the above next()
         vm.nth(38);
-        total += result.unwrap().1 * ((i * 40) + 20);
+        total += result.unwrap().0 * ((i * 40) + 20);
     }
 
     // 19, 59
