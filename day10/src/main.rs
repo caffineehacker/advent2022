@@ -21,9 +21,10 @@ struct VirtualMachine {
 }
 
 impl Iterator for VirtualMachine {
-    type Item = i32;
+    type Item = (i32, i32);
 
     fn next(&mut self) -> Option<Self::Item> {
+        let old_x = self.x;
         self.cycle += 1;
         if self.index >= self.instructions.len() {
             return None;
@@ -32,7 +33,7 @@ impl Iterator for VirtualMachine {
         let instruction = &self.instructions[self.index];
         if instruction.trim() == "noop" {
             self.index += 1;
-            return Some(self.x);
+            return Some((old_x, self.x));
         }
 
         if self.halfway_in_instruction {
@@ -47,11 +48,11 @@ impl Iterator for VirtualMachine {
                 .expect("Failed to parse increment value");
 
             self.x += increment_value;
-            return Some(self.x);
+            return Some((old_x, self.x));
         }
 
         self.halfway_in_instruction = true;
-        Some(self.x)
+        Some((old_x, self.x))
     }
 }
 
@@ -76,11 +77,33 @@ fn main() {
     for i in 0..6 {
         let result = vm.next();
         vm.nth(38);
-        total += result.unwrap() * ((i * 40) + 20);
+        total += result.unwrap().1 * ((i * 40) + 20);
     }
 
     // 19, 59
     // 19 + 39 + 1 = 59
 
     println!("Total power is {}", total);
+
+    // PART 2
+    // reset the VM
+    vm.x = 1;
+    vm.cycle = 0;
+    vm.index = 0;
+    vm.halfway_in_instruction = false;
+
+    for (index, x) in vm.enumerate() {
+        let row_index = index % 40;
+        print!(
+            "{}",
+            if ((x.0 - row_index as i32) as i32).abs() <= 1 {
+                "#"
+            } else {
+                "."
+            }
+        );
+        if row_index == 39 {
+            print!("\n");
+        }
+    }
 }
