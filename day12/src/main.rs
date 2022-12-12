@@ -61,19 +61,39 @@ fn main() {
         })
         .flatten()
         .collect();
+    let end_coordinates = elevations.iter().find(|e| *e.1 == MapPoint::End).unwrap().0;
 
     let start_coordinates = elevations
         .iter()
         .find(|e| *e.1 == MapPoint::Start)
         .unwrap()
         .0;
+    let part1 = find_best_path(&vec![*start_coordinates], end_coordinates, &elevations);
+    println!("Part 1 path is of length {}", part1);
 
-    let end_coordinates = elevations.iter().find(|e| *e.1 == MapPoint::End).unwrap().0;
+    let part2 = find_best_path(
+        &elevations
+            .iter()
+            .filter(|e| e.1.unwrap() == 0)
+            .map(|e| *e.0)
+            .collect(),
+        end_coordinates,
+        &elevations,
+    );
+    println!("Part 2 path is of length {}", part2);
+}
 
+fn find_best_path(
+    start_coordinates: &Vec<(usize, usize)>,
+    end_coordinates: &(usize, usize),
+    elevations: &HashMap<(usize, usize), MapPoint>,
+) -> u32 {
     // Since we want the shortest route we can do a BFS. We only need to keep track of the length of the route and the cells visited by any route since if another route already visited a cell then we know that was shorter.
-    let mut current_positions = vec![*start_coordinates];
+    let mut current_positions = start_coordinates.clone();
     let mut visited_positions = HashSet::new();
-    visited_positions.insert(*start_coordinates);
+    start_coordinates.iter().for_each(|c| {
+        visited_positions.insert(*c);
+    });
     let mut loop_count = 0;
     loop {
         loop_count += 1;
@@ -123,5 +143,5 @@ fn main() {
         }
     }
 
-    println!("Path is of length {}", loop_count);
+    loop_count
 }
