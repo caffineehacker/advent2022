@@ -25,24 +25,34 @@ fn main() {
         .flatten()
         .collect();
 
-    // Part 1: falling sand
     let last_rock_y = rocks.iter().map(|s| s.1).max().unwrap();
     let mut occupied_squares = rocks.clone();
 
     // We can be smart because the next piece of sand will always follow the same path as the previous one
     let mut sand_path = vec![(500, 0)];
     let mut settled_sand_count = 0;
-    'outer: loop {
+    let mut part1_done = false;
+    while !sand_path.is_empty() {
         loop {
             let test_point = sand_path.last().unwrap();
             if test_point.1 >= last_rock_y {
-                break 'outer;
+                if !part1_done {
+                    println!("Settled sand count: {}", settled_sand_count);
+                }
+                part1_done = true;
             }
-            if !occupied_squares.contains(&(test_point.0, test_point.1 + 1)) {
+
+            if test_point.1 != last_rock_y + 1
+                && !occupied_squares.contains(&(test_point.0, test_point.1 + 1))
+            {
                 sand_path.push((test_point.0, test_point.1 + 1));
-            } else if !occupied_squares.contains(&(test_point.0 - 1, test_point.1 + 1)) {
+            } else if test_point.1 != last_rock_y + 1
+                && !occupied_squares.contains(&(test_point.0 - 1, test_point.1 + 1))
+            {
                 sand_path.push((test_point.0 - 1, test_point.1 + 1));
-            } else if !occupied_squares.contains(&(test_point.0 + 1, test_point.1 + 1)) {
+            } else if test_point.1 != last_rock_y + 1
+                && !occupied_squares.contains(&(test_point.0 + 1, test_point.1 + 1))
+            {
                 sand_path.push((test_point.0 + 1, test_point.1 + 1));
             } else {
                 // Nowhere else to go, occupy this square, pop it off the test point and continue
@@ -54,7 +64,7 @@ fn main() {
         }
     }
 
-    println!("Settled sand count: {}", settled_sand_count);
+    println!("Part 2 sand count: {}", settled_sand_count);
 }
 
 fn get_rock_squares(line: String) -> Vec<(i32, i32)> {
