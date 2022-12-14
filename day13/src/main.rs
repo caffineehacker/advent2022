@@ -49,6 +49,59 @@ impl ValueOrArray {
     }
 }
 
+impl Ord for ValueOrArray {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.is_value() && other.is_value() {
+            return self.unwrap_value().cmp(other.unwrap_value());
+        }
+
+        if self.is_value() {
+            return ValueOrArray::Array(vec![Rc::new(RefCell::new(self.clone()))]).cmp(other);
+        }
+
+        if other.is_value() {
+            return self.cmp(&ValueOrArray::Array(vec![Rc::new(RefCell::new(
+                other.clone(),
+            ))]));
+        }
+
+        let mut index = 0;
+
+        while index < self.unwrap_array().len() && index < other.unwrap_array().len() {
+            let sub_result = self.unwrap_array()[index]
+                .borrow()
+                .cmp(&other.unwrap_array()[index].borrow());
+
+            if sub_result != std::cmp::Ordering::Equal {
+                return sub_result;
+            }
+
+            index += 1;
+        }
+
+        if self.unwrap_array().len() < other.unwrap_array().len() {
+            return std::cmp::Ordering::Less;
+        } else if self.unwrap_array().len() > other.unwrap_array().len() {
+            return std::cmp::Ordering::Greater;
+        }
+
+        std::cmp::Ordering::Equal
+    }
+}
+
+impl PartialOrd for ValueOrArray {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for ValueOrArray {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
+    }
+}
+impl Eq for ValueOrArray {}
+
 fn main() {
     let args = Args::parse();
 
@@ -73,7 +126,7 @@ fn main() {
         .iter()
         .enumerate()
         .map(|(index, p)| {
-            if is_in_right_order(&p.0.borrow(), &p.1.borrow()).unwrap_or(true) {
+            if *p.0.borrow() <= *p.1.borrow() {
                 index + 1
             } else {
                 0
@@ -81,55 +134,36 @@ fn main() {
         })
         .sum();
 
-    println!("Sum of correct indexes: {}", sum_of_correct);
-}
+    println!("Sum of correct indexes (part 1): {}", sum_of_correct);
 
-fn is_in_right_order(voa1: &ValueOrArray, voa2: &ValueOrArray) -> Option<bool> {
-    if voa1.is_value() && voa2.is_value() {
-        if voa1.unwrap_value() < voa2.unwrap_value() {
-            return Some(true);
-        } else if voa1.unwrap_value() == voa2.unwrap_value() {
-            return None;
-        }
-        return Some(false);
-    }
+    // Part 2
+    let mut all_entries: Vec<Rc<RefCell<ValueOrArray>>> = pairs
+        .iter()
+        .flat_map(|p| vec![p.0.clone(), p.1.clone()])
+        .collect();
+    let id1 = parse_line("[[2]]");
+    let id2 = parse_line("[[6]]");
+    all_entries.push(id1.clone());
+    all_entries.push(id2.clone());
 
-    if voa1.is_value() {
-        return is_in_right_order(
-            &ValueOrArray::Array(vec![Rc::new(RefCell::new(voa1.clone()))]),
-            voa2,
-        );
-    }
+    all_entries.sort();
+    let index_id1 = all_entries
+        .iter()
+        .enumerate()
+        .find(|e| *e.1 == id1)
+        .unwrap()
+        .0
+        + 1;
 
-    if voa2.is_value() {
-        return is_in_right_order(
-            voa1,
-            &ValueOrArray::Array(vec![Rc::new(RefCell::new(voa2.clone()))]),
-        );
-    }
+    let index_id2 = all_entries
+        .iter()
+        .enumerate()
+        .find(|e| *e.1 == id2)
+        .unwrap()
+        .0
+        + 1;
 
-    let mut index = 0;
-
-    while index < voa1.unwrap_array().len() && index < voa2.unwrap_array().len() {
-        let sub_result = is_in_right_order(
-            &voa1.unwrap_array()[index].borrow(),
-            &voa2.unwrap_array()[index].borrow(),
-        );
-
-        if !sub_result.is_none() {
-            return sub_result;
-        }
-
-        index += 1;
-    }
-
-    if voa1.unwrap_array().len() < voa2.unwrap_array().len() {
-        return Some(true);
-    } else if voa1.unwrap_array().len() > voa2.unwrap_array().len() {
-        return Some(false);
-    }
-
-    None
+    println!("Decoder key (part 2): {}", index_id1 * index_id2);
 }
 
 fn parse_line(line: &str) -> Rc<RefCell<ValueOrArray>> {
