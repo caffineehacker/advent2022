@@ -1,8 +1,16 @@
 use clap::Parser;
+use sdl2::{
+    event::Event,
+    keyboard::Keycode,
+    mouse::MouseButton,
+    pixels::Color,
+    rect::{Point, Rect},
+};
 use std::{
     collections::HashSet,
     fs::File,
     io::{BufRead, BufReader},
+    time::Duration,
 };
 
 #[derive(Parser, Debug)]
@@ -10,6 +18,8 @@ use std::{
 struct Args {
     #[arg(long)]
     data_file: String,
+    #[arg(long)]
+    enable_graphics: bool,
 }
 
 fn main() {
@@ -32,39 +42,160 @@ fn main() {
     let mut sand_path = vec![(500, 0)];
     let mut settled_sand_count = 0;
     let mut part1_done = false;
-    while !sand_path.is_empty() {
-        loop {
-            let test_point = sand_path.last().unwrap();
-            if test_point.1 >= last_rock_y {
-                if !part1_done {
-                    println!("Settled sand count: {}", settled_sand_count);
+    if args.enable_graphics {
+        let sdl_context = sdl2::init().unwrap();
+        let video_subsystem = sdl_context.video().unwrap();
+        let window = video_subsystem
+            .window("Falling Sand", 800, 600)
+            .position_centered()
+            .build()
+            .unwrap();
+        let mut canvas = window.into_canvas().present_vsync().build().unwrap();
+        canvas.set_draw_color(Color::BLACK);
+        canvas.clear();
+        canvas.present();
+        let mut event_pump = sdl_context.event_pump().unwrap();
+
+        let mut viewport = Rect::new(0, 0, 800, 600);
+        let mut scale = 100;
+        'running: loop {
+            canvas.set_draw_color(Color::BLACK);
+            canvas.clear();
+
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit { .. } => break 'running,
+                    Event::KeyDown {
+                        keycode: Some(Keycode::Right),
+                        ..
+                    } => {
+                        viewport.x -= 1;
+                    }
+                    Event::KeyDown {
+                        keycode: Some(Keycode::Left),
+                        ..
+                    } => {
+                        viewport.x += 1;
+                    }
+                    Event::KeyDown {
+                        keycode: Some(Keycode::Down),
+                        ..
+                    } => {
+                        viewport.y -= 1;
+                    }
+                    Event::KeyDown {
+                        keycode: Some(Keycode::Up),
+                        ..
+                    } => {
+                        viewport.y += 1;
+                    }
+                    Event::MouseWheel { y, .. } => {
+                        scale += y * 2;
+                    }
+                    Event::MouseMotion {
+                        mousestate,
+                        xrel,
+                        yrel,
+                        ..
+                    } => {
+                        if mousestate.left() {
+                            viewport.x += (xrel as f32 / (scale as f32 / 100.0)) as i32;
+                            viewport.y += (yrel as f32 / (scale as f32 / 100.0)) as i32;
+                        }
+                    }
+                    _ => {}
                 }
-                part1_done = true;
             }
 
-            if test_point.1 != last_rock_y + 1
-                && !occupied_squares.contains(&(test_point.0, test_point.1 + 1))
-            {
-                sand_path.push((test_point.0, test_point.1 + 1));
-            } else if test_point.1 != last_rock_y + 1
-                && !occupied_squares.contains(&(test_point.0 - 1, test_point.1 + 1))
-            {
-                sand_path.push((test_point.0 - 1, test_point.1 + 1));
-            } else if test_point.1 != last_rock_y + 1
-                && !occupied_squares.contains(&(test_point.0 + 1, test_point.1 + 1))
-            {
-                sand_path.push((test_point.0 + 1, test_point.1 + 1));
-            } else {
-                // Nowhere else to go, occupy this square, pop it off the test point and continue
-                occupied_squares.insert(*test_point);
-                sand_path.pop();
-                settled_sand_count += 1;
-                break;
+            canvas.set_viewport(viewport);
+            canvas
+                .set_scale(scale as f32 / 100.0, scale as f32 / 100.0)
+                .expect("Failed to set scale");
+
+            if !sand_path.is_empty() {
+                sand_drop(
+                    &mut sand_path,
+                    &mut occupied_squares,
+                    last_rock_y,
+                    &mut part1_done,
+                    &mut settled_sand_count,
+                );
             }
+
+            // Draw rocks
+            canvas.set_draw_color(Color::RED);
+            canvas
+                .draw_points(
+                    rocks
+                        .iter()
+                        .map(|r| Point::new(r.0, r.1))
+                        .collect::<Vec<Point>>()
+                        .as_slice(),
+                )
+                .expect("Drawing rocks failed");
+
+            // Draw sand
+            canvas.set_draw_color(Color::YELLOW);
+            canvas
+                .draw_points(
+                    occupied_squares
+                        .difference(&rocks)
+                        .map(|s| Point::new(s.0, s.1))
+                        .collect::<Vec<Point>>()
+                        .as_slice(),
+                )
+                .expect("Failed to render sand");
+
+            canvas.present();
         }
+    } else {
+        while !sand_path.is_empty() {
+            sand_drop(
+                &mut sand_path,
+                &mut occupied_squares,
+                last_rock_y,
+                &mut part1_done,
+                &mut settled_sand_count,
+            );
+        }
+
+        println!("Part 2 sand count: {}", settled_sand_count);
+    }
+}
+
+fn sand_drop(
+    sand_path: &mut Vec<(i32, i32)>,
+    occupied_squares: &mut HashSet<(i32, i32)>,
+    last_rock_y: i32,
+    part1_done: &mut bool,
+    settled_sand_count: &mut i32,
+) {
+    let test_point = sand_path.last().unwrap();
+    if test_point.1 >= last_rock_y {
+        if !*part1_done {
+            println!("Settled sand count: {}", settled_sand_count);
+        }
+        *part1_done = true;
     }
 
-    println!("Part 2 sand count: {}", settled_sand_count);
+    if test_point.1 != last_rock_y + 1
+        && !occupied_squares.contains(&(test_point.0, test_point.1 + 1))
+    {
+        sand_path.push((test_point.0, test_point.1 + 1));
+    } else if test_point.1 != last_rock_y + 1
+        && !occupied_squares.contains(&(test_point.0 - 1, test_point.1 + 1))
+    {
+        sand_path.push((test_point.0 - 1, test_point.1 + 1));
+    } else if test_point.1 != last_rock_y + 1
+        && !occupied_squares.contains(&(test_point.0 + 1, test_point.1 + 1))
+    {
+        sand_path.push((test_point.0 + 1, test_point.1 + 1));
+    } else {
+        // Nowhere else to go, occupy this square, pop it off the test point and continue
+        occupied_squares.insert(*test_point);
+        sand_path.pop();
+        *settled_sand_count += 1;
+    }
 }
 
 fn get_rock_squares(line: String) -> Vec<(i32, i32)> {
