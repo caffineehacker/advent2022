@@ -12,6 +12,8 @@ struct Args {
     data_file: String,
     #[arg(long)]
     part1_y: u32,
+    #[arg(long)]
+    part2_max: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -64,6 +66,46 @@ fn main() {
         "Part 1, covered cells in row {}: {}",
         args.part1_y, covered_columns
     );
+
+    // Part 2
+    let mut y = 0;
+    while y <= args.part2_max {
+        let mut candidate_sensors: Vec<(i32, i32)> = sensors_and_beacons
+            .iter()
+            .map(|sb| sb.0)
+            .filter(|s| s.location.1.abs_diff(y as i32) <= s.range)
+            .map(|s| {
+                let remaining_range = s.range as i32 - s.location.1.abs_diff(y as i32) as i32;
+                (
+                    s.location.0 - remaining_range,
+                    s.location.0 + remaining_range,
+                )
+            })
+            .collect();
+        candidate_sensors.sort_by_cached_key(|cs| cs.0);
+        let mut x = 0;
+        while x <= args.part2_max {
+            let covering_sensor = candidate_sensors
+                .iter()
+                .filter(|cs| cs.0 <= x as i32 && cs.1 >= x as i32)
+                .nth(0);
+
+            match covering_sensor {
+                Some(cs) => {
+                    x = cs.1 as u32;
+                }
+                None => {
+                    println!("Part 2, beacon is at {}, {}", x, y);
+                    println!("Part 2 result: {}", x as u64 * 4000000 + y as u64);
+                    return;
+                }
+            }
+            println!("{}, {}", x, y);
+
+            x += 1;
+        }
+        y += 1;
+    }
 }
 
 fn parse_line(line: String) -> (Sensor, Beacon) {
