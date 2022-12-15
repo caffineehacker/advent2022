@@ -2,7 +2,6 @@ use clap::Parser;
 use sdl2::{
     event::Event,
     keyboard::Keycode,
-    mouse::MouseButton,
     pixels::Color,
     rect::{Point, Rect},
 };
@@ -10,7 +9,6 @@ use std::{
     collections::HashSet,
     fs::File,
     io::{BufRead, BufReader},
-    time::Duration,
 };
 
 #[derive(Parser, Debug)]
@@ -47,10 +45,11 @@ fn main() {
         let video_subsystem = sdl_context.video().unwrap();
         let window = video_subsystem
             .window("Falling Sand", 800, 600)
+            .opengl()
             .position_centered()
             .build()
             .unwrap();
-        let mut canvas = window.into_canvas().present_vsync().build().unwrap();
+        let mut canvas = window.into_canvas().build().unwrap();
         canvas.set_draw_color(Color::BLACK);
         canvas.clear();
         canvas.present();
