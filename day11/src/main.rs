@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufRead, BufReader},
+    rc::Rc,
 };
 
 #[derive(Parser, Debug)]
@@ -13,14 +14,15 @@ struct Args {
     data_file: String,
 }
 
+#[derive(Clone)]
 struct Monkey {
-    number: u32,
-    items: Vec<u32>,
-    operation: Box<dyn Fn(u32) -> u32>,
-    test_value: u32,
-    true_destination: u32,
-    false_destination: u32,
-    item_inspection_count: u32,
+    number: u64,
+    items: Vec<u64>,
+    operation: Rc<Box<dyn Fn(u64) -> u64>>,
+    test_value: u64,
+    true_destination: u64,
+    false_destination: u64,
+    item_inspection_count: u64,
 }
 
 fn main() {
@@ -35,7 +37,7 @@ fn main() {
     // Parsing is FUN
     while lines.peek().is_some() {
         // First line is "Monkey #:"
-        let monkey_number: u32 = lines
+        let monkey_number: u64 = lines
             .next()
             .unwrap()
             .expect("Failed to parse line")
@@ -45,7 +47,7 @@ fn main() {
             .trim_end_matches(":")
             .parse()
             .expect("Failed to parse monkey number");
-        let items: Vec<u32> = lines
+        let items: Vec<u64> = lines
             .next()
             .unwrap()
             .expect("Failed to parse line")
@@ -71,7 +73,7 @@ fn main() {
             .split_whitespace()
             .last()
             .unwrap()
-            .parse::<u32>()
+            .parse::<u64>()
             .expect("Failed to parse test number");
         let true_destination = lines
             .next()
@@ -80,7 +82,7 @@ fn main() {
             .split_whitespace()
             .last()
             .unwrap()
-            .parse::<u32>()
+            .parse::<u64>()
             .expect("Failed to parse true number");
         let false_destination = lines
             .next()
@@ -89,7 +91,7 @@ fn main() {
             .split_whitespace()
             .last()
             .unwrap()
-            .parse::<u32>()
+            .parse::<u64>()
             .expect("Failed to parse false number");
 
         monkeys.insert(
@@ -109,33 +111,18 @@ fn main() {
         lines.next();
     }
 
-    for _ in 0..20 {
-        let mut monkeys = monkeys.values().collect::<Vec<&RefCell<Monkey>>>();
-        monkeys.sort_by_key(|m| m.borrow().number);
-        for monkey in monkeys.iter() {
-            let mut monkey = monkey.borrow_mut();
-            for item in monkey.items.iter() {
-                let item = (monkey.operation)(*item) / 3;
-                if item % monkey.test_value == 0 {
-                    monkeys
-                        .get(monkey.true_destination as usize)
-                        .unwrap()
-                        .borrow_mut()
-                        .items
-                        .push(item);
-                } else {
-                    monkeys
-                        .get(monkey.false_destination as usize)
-                        .unwrap()
-                        .borrow_mut()
-                        .items
-                        .push(item);
-                }
-            }
+    calculate_monkey_business(monkeys.clone(), 20, 3);
+    calculate_monkey_business(monkeys.clone(), 10000, 1);
+}
 
-            monkey.item_inspection_count += monkey.items.len() as u32;
-            monkey.items.clear();
-        }
+fn calculate_monkey_business(
+    monkeys: HashMap<u64, RefCell<Monkey>>,
+    loops: usize,
+    worriness_divider: u64,
+) {
+    let mut monkeys = monkeys;
+    for _ in 0..loops {
+        conduct_pass(&mut monkeys, worriness_divider);
     }
 
     let mut monkeys = monkeys.values().collect::<Vec<&RefCell<Monkey>>>();
@@ -146,12 +133,47 @@ fn main() {
     });
 
     println!(
-        "Monkey business: {}",
-        monkeys[0].borrow().item_inspection_count * monkeys[1].borrow().item_inspection_count
+        "Monkey business after {} rounds: {}",
+        loops,
+        monkeys[0].borrow().item_inspection_count as u64
+            * monkeys[1].borrow().item_inspection_count as u64
     );
 }
 
-fn create_operation_fn(input: &str) -> Box<dyn Fn(u32) -> u32> {
+fn conduct_pass(monkeys: &mut HashMap<u64, RefCell<Monkey>>, worriness_divider: u64) {
+    let modulo = monkeys
+        .values()
+        .fold(1, |acc, m| acc * m.borrow().test_value);
+    let mut monkeys = monkeys.values().collect::<Vec<&RefCell<Monkey>>>();
+    monkeys.sort_by_key(|m| m.borrow().number);
+    for monkey in monkeys.iter() {
+        let mut monkey = monkey.borrow_mut();
+        for item in monkey.items.iter() {
+            let item = (monkey.operation)(*item) / worriness_divider;
+            let item = item % modulo;
+            if item % monkey.test_value == 0 {
+                monkeys
+                    .get(monkey.true_destination as usize)
+                    .unwrap()
+                    .borrow_mut()
+                    .items
+                    .push(item);
+            } else {
+                monkeys
+                    .get(monkey.false_destination as usize)
+                    .unwrap()
+                    .borrow_mut()
+                    .items
+                    .push(item);
+            }
+        }
+
+        monkey.item_inspection_count += monkey.items.len() as u64;
+        monkey.items.clear();
+    }
+}
+
+fn create_operation_fn(input: &str) -> Rc<Box<dyn Fn(u64) -> u64>> {
     let (first_value, input) = input.split_once(" ").unwrap();
     let (operator, second_value) = input.split_once(" ").unwrap();
 
@@ -164,12 +186,12 @@ fn create_operation_fn(input: &str) -> Box<dyn Fn(u32) -> u32> {
     } else {
         Some(
             second_value
-                .parse::<u32>()
+                .parse::<u64>()
                 .expect("Failed to parse operation param"),
         )
     };
 
-    match operator {
+    Rc::new(match operator {
         "*" => Box::new(move |old_value| {
             old_value
                 * match second_value {
@@ -185,5 +207,5 @@ fn create_operation_fn(input: &str) -> Box<dyn Fn(u32) -> u32> {
                 }
         }),
         _ => panic!("Unexpected operator"),
-    }
+    })
 }
