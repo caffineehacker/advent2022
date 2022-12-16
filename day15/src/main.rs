@@ -1,6 +1,5 @@
 use clap::Parser;
 use std::{
-    collections::HashSet,
     fs::File,
     io::{BufRead, BufReader},
 };
@@ -99,6 +98,7 @@ fn main() {
                 "Part 2 result: {}",
                 first_uncovered as u64 * 4000000 + y as u64
             );
+            return;
         }
         y += 1;
     }
