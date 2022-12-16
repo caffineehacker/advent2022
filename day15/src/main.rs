@@ -22,57 +22,60 @@ struct Sensor {
     range: u32,
 }
 
-#[derive(Clone, Copy)]
-struct Beacon {
-    location: (i32, i32),
-}
-
 fn main() {
     let args = Args::parse();
 
     let file = File::open(&args.data_file).expect("Failed to open file");
     let reader = BufReader::new(file);
 
-    let sensors_and_beacons: Vec<(Sensor, Beacon)> = reader
+    let sensors: Vec<Sensor> = reader
         .lines()
         .map(|line| line.expect("Failed to parse line"))
         .map(parse_line)
         .collect();
 
     // Part 1
-    let candidate_sensors: Vec<Sensor> = sensors_and_beacons
+    let mut candidate_sensors: Vec<(i32, i32)> = sensors
         .iter()
-        .map(|sb| sb.0)
         .filter(|s| s.location.1.abs_diff(args.part1_y as i32) <= s.range)
-        .collect();
-
-    let beacons_in_row: HashSet<i32> = sensors_and_beacons
-        .iter()
-        .map(|sb| sb.1.location.1)
-        .filter(|y| *y == args.part1_y as i32)
-        .collect();
-
-    let sensed_columns: HashSet<i32> = candidate_sensors
-        .iter()
-        .flat_map(|s| {
-            let distance_to_target_row = s.location.1.abs_diff(args.part1_y as i32);
-            let remaining_range = s.range as i32 - distance_to_target_row as i32;
-            (s.location.0 - remaining_range)..=(s.location.0 + remaining_range)
+        .map(|s| {
+            let remaining_range =
+                s.range as i32 - s.location.1.abs_diff(args.part1_y as i32) as i32;
+            (
+                s.location.0 - remaining_range,
+                s.location.0 + remaining_range,
+            )
         })
         .collect();
+    candidate_sensors.sort_by_key(|cs| cs.0);
 
-    let covered_columns = sensed_columns.difference(&beacons_in_row).count();
+    let covered_columns_count = candidate_sensors
+        .iter()
+        .fold((None, 0), |acc, sensor_range| {
+            if acc.0.is_some() && acc.0.unwrap() > sensor_range.1 {
+                return acc;
+            }
+
+            if acc.0.is_none() {
+                return (Some(sensor_range.1), (sensor_range.1 - sensor_range.0) + 1);
+            }
+
+            (
+                Some(sensor_range.1),
+                acc.1 + sensor_range.1 - acc.0.unwrap(),
+            )
+        })
+        .1;
     println!(
         "Part 1, covered cells in row {}: {}",
-        args.part1_y, covered_columns
+        args.part1_y, covered_columns_count
     );
 
     // Part 2
     let mut y = 0;
     while y <= args.part2_max {
-        let mut candidate_sensors: Vec<(i32, i32)> = sensors_and_beacons
+        let mut candidate_sensors: Vec<(i32, i32)> = sensors
             .iter()
-            .map(|sb| sb.0)
             .filter(|s| s.location.1.abs_diff(y as i32) <= s.range)
             .map(|s| {
                 let remaining_range = s.range as i32 - s.location.1.abs_diff(y as i32) as i32;
@@ -82,33 +85,26 @@ fn main() {
                 )
             })
             .collect();
-        candidate_sensors.sort_by_cached_key(|cs| cs.0);
-        let mut x = 0;
-        while x <= args.part2_max {
-            let covering_sensor = candidate_sensors
-                .iter()
-                .filter(|cs| cs.0 <= x as i32 && cs.1 >= x as i32)
-                .nth(0);
-
-            match covering_sensor {
-                Some(cs) => {
-                    x = cs.1 as u32;
-                }
-                None => {
-                    println!("Part 2, beacon is at {}, {}", x, y);
-                    println!("Part 2 result: {}", x as u64 * 4000000 + y as u64);
-                    return;
-                }
+        candidate_sensors.sort_by_key(|cs| cs.0);
+        let first_uncovered = candidate_sensors.iter().fold(0, |acc, cs| {
+            if acc < cs.0 || acc > cs.1 {
+                return acc;
             }
-            println!("{}, {}", x, y);
 
-            x += 1;
+            return cs.1 + 1;
+        });
+        if first_uncovered < args.part2_max as i32 {
+            println!("{}, {}", first_uncovered, y);
+            println!(
+                "Part 2 result: {}",
+                first_uncovered as u64 * 4000000 + y as u64
+            );
         }
         y += 1;
     }
 }
 
-fn parse_line(line: String) -> (Sensor, Beacon) {
+fn parse_line(line: String) -> Sensor {
     let components: Vec<&str> = line.split_whitespace().collect();
 
     let sensor_location = (
@@ -133,14 +129,9 @@ fn parse_line(line: String) -> (Sensor, Beacon) {
         components[9].trim_start_matches("y=").parse().unwrap(),
     );
 
-    (
-        Sensor {
-            location: sensor_location,
-            range: sensor_location.0.abs_diff(beacon_location.0)
-                + sensor_location.1.abs_diff(beacon_location.1),
-        },
-        Beacon {
-            location: beacon_location,
-        },
-    )
+    Sensor {
+        location: sensor_location,
+        range: sensor_location.0.abs_diff(beacon_location.0)
+            + sensor_location.1.abs_diff(beacon_location.1),
+    }
 }
