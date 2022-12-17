@@ -94,7 +94,6 @@ struct SettledState {
     height_above_row: usize,
     last_rock: Rock,
     next_jet_index: usize,
-    rows: VecDeque<u8>,
 }
 
 fn run_simulation(jet_input: &str, count: usize) -> u64 {
@@ -118,7 +117,7 @@ fn run_simulation(jet_input: &str, count: usize) -> u64 {
 
     let mut rows = VecDeque::new();
     rows.push_back(0b1111111u8);
-    'rock_drop: while rocks_dropped < count as u64 {
+    while rocks_dropped < count as u64 {
         let r = rocks.next().unwrap();
         // Note that the rock_rows are bottom first
         let mut rock_rows = match r {
@@ -174,11 +173,10 @@ fn run_simulation(jet_input: &str, count: usize) -> u64 {
                     if rows[next_drop_index] | rows[next_drop_index + 1] == 0b1111111u8 {
                         settled_states.push(SettledState {
                             row_index: next_drop_index,
-                            rocks_dropped: rocks_dropped,
+                            rocks_dropped,
                             height_above_row: rows.len() - next_drop_index,
                             last_rock: r,
                             next_jet_index: push_iter.next_index as usize,
-                            rows: rows.clone(),
                         });
                     }
 
@@ -191,13 +189,12 @@ fn run_simulation(jet_input: &str, count: usize) -> u64 {
                                 settled_states[last_index].rocks_dropped as u64 - initial_rocks;
                             let repeated_height = settled_states[last_index].row_index
                                 - settled_states[first_index].row_index;
-                            let repeat_count = (count as u64 - initial_rocks) / repeated_rocks;
+                            let repeat_count = (count as u64 - rocks_dropped) / repeated_rocks;
                             let remaining_count =
-                                count as u64 - (repeat_count * repeated_rocks) - initial_rocks;
+                                count as u64 - (repeat_count * repeated_rocks) - rocks_dropped;
                             rocks_dropped = count as u64 - remaining_count;
                             // We already have 1 repeat since we found it
                             bonus_height = (repeat_count as u64) * repeated_height as u64;
-                            rows = settled_states[first_index].rows.clone();
 
                             println!("Current height: {}", rows.len() - 1);
                             println!("Bonus height: {}", bonus_height);
@@ -205,8 +202,6 @@ fn run_simulation(jet_input: &str, count: usize) -> u64 {
                             println!("Repeat count: {}", repeat_count);
                             println!("Rocks per repeat: {}", repeated_rocks);
                             println!("Height per repeat: {}", repeated_height);
-
-                            continue 'rock_drop;
                         }
                     }
                 }
@@ -247,7 +242,7 @@ fn run_simulation(jet_input: &str, count: usize) -> u64 {
         }
     }
 
-    //show_tower(&rows, 0);
+    show_tower(&rows, rows.len() - 50);
 
     // We subtract 1 for the floor we added
     (rows.len() - 1 + bonus_height as usize) as u64
