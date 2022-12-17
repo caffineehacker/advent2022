@@ -85,8 +85,17 @@ fn main() {
         .map(|line| line.expect("Failed to read line"))
         .last()
         .unwrap();
+
+    let height = run_simulation(&input, 2022);
+    println!("Height after 2022 is {}", height);
+
+    let height = run_simulation(&input, 1000000000000);
+    println!("Height after 1000000000000 is {}", height);
+}
+
+fn run_simulation(jet_input: &str, count: usize) -> u64 {
     let mut push_iter = Jet {
-        jet_pattern: input,
+        jet_pattern: jet_input.to_string(),
         next_index: 0,
     };
     let rocks = Rocks {
@@ -95,8 +104,7 @@ fn main() {
 
     let mut rows = VecDeque::new();
     rows.push_back(0b1111111u8);
-    rocks.take(2022).for_each(|r| {
-        println!("New rock");
+    rocks.take(count).for_each(|r| {
         // Note that the rock_rows are bottom first
         let mut rock_rows = match r {
             Rock::HorizontalLine => vec![0b0011110u8],
@@ -106,7 +114,7 @@ fn main() {
             Rock::Square => vec![0b0011000u8, 0b0011000u8],
         };
 
-        // We can always go 4 drops before worrying about hitting another rock
+        // We can always go 4 pushes / 3 drops before worrying about hitting another rock
         for _ in 0..4 {
             match push_iter.next().unwrap() {
                 JetPush::Left => {
@@ -181,7 +189,8 @@ fn main() {
         }
     });
 
-    println!("Height is {}", rows.len() - 1);
+    // We subtract 1 for the floor we added
+    (rows.len() - 1) as u64
 }
 
 fn show_tower(rows: &VecDeque<u8>) {
