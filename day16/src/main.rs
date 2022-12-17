@@ -129,6 +129,10 @@ fn main() {
 
         current_state.remaining_valves.iter().for_each(|v| {
             let valve_distance = v.valve_distances[&current_state.current_valve_room];
+            if current_state.time_passed + valve_distance + 1 > 30 {
+                return;
+            }
+
             let next_flowed =
                 current_state.already_flowed + current_state.flow_per_minute * (valve_distance + 1);
             let new_flow_rate = current_state.flow_per_minute + v.flow_rate;
@@ -226,10 +230,16 @@ fn calculate_distance(
         }
     }
 
+    let mut seen_rooms = HashSet::new();
     let mut search_states = VecDeque::from([(valve_a, 0)]);
 
     loop {
         let current_state = search_states.pop_front().unwrap();
+        if seen_rooms.contains(&current_state.0.name) {
+            continue;
+        }
+
+        seen_rooms.insert(current_state.0.name.clone());
         current_state.0.connected_valves.iter().for_each(|v| {
             let valve = valves.iter().find(|valve| valve.name == *v).unwrap();
             search_states.push_back((valve, current_state.1 + 1));
