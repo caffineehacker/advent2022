@@ -74,6 +74,63 @@ impl PartialOrd for SearchState {
     }
 }
 
+#[derive(PartialEq, Eq)]
+struct Part2SearchState {
+    my_next_room: Rc<Valve>,
+    elephant_next_room: Rc<Valve>,
+    my_time_to_destination: u32,
+    elephant_time_to_destination: u32,
+    time_passed: u32,
+    already_flowed: u32,
+    flow_per_minute: u32,
+    enabled_valves: Vec<Rc<Valve>>,
+    remaining_valves: Vec<Rc<Valve>>,
+}
+
+impl Part2SearchState {
+    fn potential_flow(&self) -> u32 {
+        let mut remaining_valves = self.remaining_valves.clone();
+        remaining_valves.sort_by_key(|v| v.flow_rate);
+        if self.my_time_to_destination > 0 {
+            remaining_valves.push(self.my_next_room.clone());
+        }
+        if self.elephant_time_to_destination > 0 {
+            remaining_valves.push(self.elephant_next_room.clone());
+        }
+        let remaining_time = 26 - self.time_passed;
+        let potential_flow = self.already_flowed
+            + (self.flow_per_minute * remaining_time)
+            + remaining_valves
+                .iter()
+                .rev()
+                .enumerate()
+                .take(remaining_time as usize)
+                .map(|rv| {
+                    let time_to_open_valve = rv.0 as u32 * 2;
+                    if time_to_open_valve >= remaining_time {
+                        return 0;
+                    }
+                    let remaining_time = remaining_time - time_to_open_valve;
+                    rv.1.flow_rate * remaining_time
+                })
+                .sum::<u32>();
+
+        potential_flow
+    }
+}
+
+impl Ord for Part2SearchState {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.potential_flow().cmp(&other.potential_flow())
+    }
+}
+
+impl PartialOrd for Part2SearchState {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 fn main() {
     let args = Args::parse();
 
@@ -91,6 +148,11 @@ fn main() {
         .map(|v| (v.name.to_string(), Rc::new(v)))
         .collect();
 
+    do_part_1(&valves);
+    do_part_2(&valves);
+}
+
+fn do_part_1(valves: &HashMap<String, Rc<Valve>>) {
     let mut search_states: BinaryHeap<SearchState> = BinaryHeap::new();
     search_states.push(SearchState {
         current_valve_room: "AA".to_string(),
@@ -168,6 +230,139 @@ fn main() {
                 remaining_valves: current_state.remaining_valves,
             });
         }
+    }
+}
+
+fn do_part_2(valves: &HashMap<String, Rc<Valve>>) {
+    let mut search_states: BinaryHeap<Part2SearchState> = BinaryHeap::new();
+    search_states.push(Part2SearchState {
+        my_next_room: valves["AA"].clone(),
+        my_time_to_destination: 0,
+        elephant_next_room: valves["AA"].clone(),
+        elephant_time_to_destination: 0,
+        time_passed: 0,
+        already_flowed: 0,
+        flow_per_minute: 0,
+        enabled_valves: Vec::new(),
+        remaining_valves: valves
+            .values()
+            .filter(|v| v.name != "AA" && v.flow_rate > 0)
+            .cloned()
+            .collect(),
+    });
+
+    loop {
+        let mut current_state = search_states.pop().unwrap();
+        if current_state.time_passed == 26 {
+            println!(
+                "Part 2, pressure released: {}",
+                current_state.already_flowed
+            );
+            break;
+        }
+
+        println!(
+            "Time: {}, Rooms: {} ({}) / {} ({}), Flowed: {}, Flow rate: {}",
+            current_state.time_passed,
+            current_state.my_next_room.name,
+            current_state.my_time_to_destination,
+            current_state.elephant_next_room.name,
+            current_state.elephant_time_to_destination,
+            current_state.already_flowed,
+            current_state.flow_per_minute
+        );
+
+        if current_state.my_time_to_destination > 0
+            && current_state.elephant_time_to_destination > 0
+        {
+            // First flow time before looking at destinations
+            let my_turn =
+                current_state.my_time_to_destination < current_state.elephant_time_to_destination;
+            let time_to_flow = if my_turn {
+                current_state.my_time_to_destination
+            } else {
+                current_state.elephant_time_to_destination
+            };
+            let time_to_flow = time_to_flow.min(26 - current_state.time_passed);
+
+            current_state.my_time_to_destination -= time_to_flow;
+            current_state.elephant_time_to_destination -= time_to_flow;
+            current_state.time_passed += time_to_flow;
+            current_state.already_flowed += current_state.flow_per_minute * time_to_flow;
+
+            if current_state.my_time_to_destination == 0 {
+                let destination = current_state.my_next_room.clone();
+                current_state.flow_per_minute += destination.flow_rate;
+                current_state.enabled_valves.push(destination);
+            }
+
+            if current_state.elephant_time_to_destination == 0 {
+                let destination = current_state.elephant_next_room.clone();
+                current_state.flow_per_minute += destination.flow_rate;
+                current_state.enabled_valves.push(destination);
+            }
+
+            search_states.push(current_state);
+
+            continue;
+        }
+
+        if current_state.remaining_valves.is_empty() {
+            // We'll never pass this much time, but it will trigger the above condition which will accelerate time to 26 minutes
+            if current_state.my_time_to_destination == 0 {
+                current_state.my_time_to_destination = 1000;
+            }
+            if current_state.elephant_time_to_destination == 0 {
+                current_state.elephant_time_to_destination = 1000;
+            }
+            search_states.push(current_state);
+            continue;
+        }
+
+        current_state.remaining_valves.iter().for_each(|v| {
+            let my_turn = current_state.my_time_to_destination == 0;
+            let current_room = if my_turn {
+                &current_state.my_next_room
+            } else {
+                &current_state.elephant_next_room
+            };
+            let valve_distance = v.valve_distances[&current_room.name];
+
+            let remaining_valves = current_state
+                .remaining_valves
+                .iter()
+                .filter(|rv| v.name != rv.name)
+                .cloned()
+                .collect();
+
+            search_states.push(Part2SearchState {
+                my_next_room: if my_turn {
+                    v.clone()
+                } else {
+                    current_state.my_next_room.clone()
+                },
+                elephant_next_room: if my_turn {
+                    current_state.elephant_next_room.clone()
+                } else {
+                    v.clone()
+                },
+                my_time_to_destination: if my_turn {
+                    valve_distance + 1
+                } else {
+                    current_state.my_time_to_destination
+                },
+                elephant_time_to_destination: if my_turn {
+                    current_state.elephant_time_to_destination
+                } else {
+                    valve_distance + 1
+                },
+                time_passed: current_state.time_passed,
+                already_flowed: current_state.already_flowed,
+                flow_per_minute: current_state.flow_per_minute,
+                enabled_valves: current_state.enabled_valves.clone(),
+                remaining_valves,
+            });
+        });
     }
 }
 

@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.runnables.extraArgs": [
+        "-- --data-file=example.txt"
+    ]
+}
