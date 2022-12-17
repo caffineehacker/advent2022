@@ -1,6 +1,6 @@
 use clap::Parser;
 use std::{
-    collections::{BinaryHeap, HashMap, HashSet},
+    collections::{BinaryHeap, HashMap, HashSet, VecDeque},
     fs::File,
     io::{BufRead, BufReader},
     rc::Rc,
@@ -13,11 +13,12 @@ struct Args {
     data_file: String,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 struct Valve {
     name: String,
     flow_rate: u32,
     connected_valves: Vec<String>,
+    valve_distances: HashMap<String, u32>,
 }
 
 #[derive(PartialEq, Eq)]
@@ -79,10 +80,14 @@ fn main() {
     let file = File::open(&args.data_file).expect("Failed to open file");
     let reader = BufReader::new(file);
 
-    let valves: HashMap<String, Rc<Valve>> = reader
+    let valves: Vec<Valve> = reader
         .lines()
         .map(|line| line.expect("Failed to parse line"))
         .map(parse_valve)
+        .collect();
+    let valves = update_distances(valves);
+    let valves: HashMap<String, Rc<Valve>> = valves
+        .into_iter()
         .map(|v| (v.name.to_string(), Rc::new(v)))
         .collect();
 
@@ -93,7 +98,11 @@ fn main() {
         already_flowed: 0,
         flow_per_minute: 0,
         enabled_valves: Vec::new(),
-        remaining_valves: valves.values().cloned().collect(),
+        remaining_valves: valves
+            .values()
+            .filter(|v| v.name != "AA" && v.flow_rate > 0)
+            .cloned()
+            .collect(),
     });
 
     // Holds a hash of room, flowed, and flow rate. Once we've been somewhere at a state once, we shouldn't go there in the same state again
@@ -118,50 +127,43 @@ fn main() {
             current_state.flow_per_minute
         );
 
-        let next_tick_flowed = current_state.already_flowed + current_state.flow_per_minute;
-        let current_valve = valves.get(&current_state.current_valve_room).unwrap();
-        if !current_state
-            .enabled_valves
-            .iter()
-            .any(|v| v.name == current_state.current_valve_room)
-        {
-            let new_flow_rate = current_state.flow_per_minute + current_valve.flow_rate;
-            if !seen_states.contains(&(current_valve.name.clone(), next_tick_flowed, new_flow_rate))
-            {
-                seen_states.insert((current_valve.name.clone(), next_tick_flowed, new_flow_rate));
-                let mut enabled_valves = current_state.enabled_valves.clone();
-                enabled_valves.push(current_valve.clone());
-                let remaining_valves = current_state
-                    .remaining_valves
-                    .iter()
-                    .filter(|v| v.name != current_state.current_valve_room)
-                    .cloned()
-                    .collect();
+        current_state.remaining_valves.iter().for_each(|v| {
+            let valve_distance = v.valve_distances[&current_state.current_valve_room];
+            let next_flowed =
+                current_state.already_flowed + current_state.flow_per_minute * (valve_distance + 1);
+            let new_flow_rate = current_state.flow_per_minute + v.flow_rate;
+            let mut enabled_valves = current_state.enabled_valves.clone();
+            enabled_valves.push(v.clone());
+            let remaining_valves = current_state
+                .remaining_valves
+                .iter()
+                .filter(|rv| v.name != rv.name)
+                .cloned()
+                .collect();
+            if !seen_states.contains(&(v.name.clone(), next_flowed, new_flow_rate)) {
+                seen_states.insert((v.name.clone(), next_flowed, new_flow_rate));
                 search_states.push(SearchState {
-                    current_valve_room: current_state.current_valve_room,
-                    time_passed: current_state.time_passed + 1,
-                    already_flowed: next_tick_flowed,
+                    current_valve_room: v.name.clone(),
+                    time_passed: current_state.time_passed + valve_distance + 1,
+                    already_flowed: next_flowed,
                     flow_per_minute: new_flow_rate,
-                    enabled_valves: enabled_valves,
-                    remaining_valves: remaining_valves,
-                });
-            }
-        }
-
-        current_valve.connected_valves.iter().for_each(|v| {
-            if !seen_states.contains(&(v.clone(), next_tick_flowed, current_state.flow_per_minute))
-            {
-                seen_states.insert((v.clone(), next_tick_flowed, current_state.flow_per_minute));
-                search_states.push(SearchState {
-                    current_valve_room: v.clone(),
-                    time_passed: current_state.time_passed + 1,
-                    already_flowed: next_tick_flowed,
-                    flow_per_minute: current_state.flow_per_minute,
-                    enabled_valves: current_state.enabled_valves.clone(),
-                    remaining_valves: current_state.remaining_valves.clone(),
+                    enabled_valves,
+                    remaining_valves,
                 });
             }
         });
+
+        if current_state.remaining_valves.is_empty() {
+            search_states.push(SearchState {
+                current_valve_room: current_state.current_valve_room,
+                time_passed: 30,
+                already_flowed: current_state.already_flowed
+                    + current_state.flow_per_minute * (30 - current_state.time_passed),
+                flow_per_minute: current_state.flow_per_minute,
+                enabled_valves: current_state.enabled_valves,
+                remaining_valves: current_state.remaining_valves,
+            });
+        }
     }
 }
 
@@ -180,5 +182,61 @@ fn parse_valve(line: String) -> Valve {
             .skip(9)
             .map(|v| v.trim_end_matches(",").to_string())
             .collect(),
+        valve_distances: HashMap::new(),
+    }
+}
+
+fn update_distances(valves: Vec<Valve>) -> Vec<Valve> {
+    let mut modified_valves: Vec<Valve> = Vec::new();
+
+    for valve in valves.iter() {
+        if valve.name != "AA" && valve.flow_rate <= 0 {
+            continue;
+        }
+
+        let mut new_valve = valve.clone();
+
+        new_valve.valve_distances = valves
+            .iter()
+            .filter(|v| v.name != valve.name)
+            .filter(|v| v.flow_rate > 0 || v.name == "AA")
+            .map(|v| {
+                (
+                    v.name.clone(),
+                    calculate_distance(&valve, v, &valves, &modified_valves),
+                )
+            })
+            .collect();
+
+        modified_valves.push(new_valve);
+    }
+
+    modified_valves
+}
+
+fn calculate_distance(
+    valve_a: &Valve,
+    valve_b: &Valve,
+    valves: &Vec<Valve>,
+    modified_valves: &Vec<Valve>,
+) -> u32 {
+    if let Some(modified_valve) = modified_valves.iter().find(|mv| mv.name == valve_b.name) {
+        if let Some(distance) = modified_valve.valve_distances.get(&valve_a.name) {
+            return *distance;
+        }
+    }
+
+    let mut search_states = VecDeque::from([(valve_a, 0)]);
+
+    loop {
+        let current_state = search_states.pop_front().unwrap();
+        current_state.0.connected_valves.iter().for_each(|v| {
+            let valve = valves.iter().find(|valve| valve.name == *v).unwrap();
+            search_states.push_back((valve, current_state.1 + 1));
+        });
+
+        if current_state.0.name == valve_b.name {
+            return current_state.1;
+        }
     }
 }
