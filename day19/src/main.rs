@@ -1,7 +1,7 @@
 use clap::Parser;
 use rayon::prelude::*;
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{BinaryHeap, HashSet, VecDeque},
     fs::File,
     io::{BufRead, BufReader},
 };
@@ -37,13 +37,22 @@ fn main() {
     let total_quality: usize = blueprints
         .par_iter()
         .enumerate()
-        .map(|(index, blueprint)| (index + 1) * best_geode_count(&blueprint))
+        .map(|(index, blueprint)| (index + 1) * best_geode_count(&blueprint, 24))
         .sum();
 
     println!("Part 1 total: {}", total_quality);
+
+    let best: Vec<usize> = blueprints
+        .par_iter()
+        .take(3)
+        .map(|blueprint| best_geode_count(&blueprint, 32))
+        .collect();
+
+    println!("Best 3: {}, {}, {}", best[0], best[1], best[2]);
+    println!("Part 1 total: {}", best[0] * best[1] * best[2]);
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct SearchState {
     geodes: u32,
     geode_robots: u32,
@@ -53,33 +62,97 @@ struct SearchState {
     clay_robots: u32,
     ore: u32,
     ore_robots: u32,
+    remaining_time: u32,
 }
 
-fn best_geode_count(blueprint: &Blueprint) -> usize {
-    let mut search_states = VecDeque::new();
-    search_states.push_back((
-        SearchState {
-            ore: 0,
-            ore_robots: 1,
-            clay: 0,
-            clay_robots: 0,
-            obsidian: 0,
-            obsidian_robots: 0,
-            geodes: 0,
-            geode_robots: 0,
-        },
-        0,
-    ));
+impl SearchState {
+    fn geode_potential(&self) -> u32 {
+        // The potential is the numbe of geodes we already have
+        // plus the number of geode robots times the time remaing
+        // plus the number of geodes that could be produced by making a new geode robot each minute.
+        let geodes = self.geodes
+            + (0..self.remaining_time)
+                .rev()
+                .map(|t| self.geode_robots + t)
+                .sum::<u32>();
+
+        geodes
+    }
+}
+
+impl PartialOrd for SearchState {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        // First order comparison is the geode potential of the state
+        match self.geode_potential().partial_cmp(&other.geode_potential()) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+
+        match self.geodes.partial_cmp(&other.geodes) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.geode_robots.partial_cmp(&other.geode_robots) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.obsidian.partial_cmp(&other.obsidian) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.obsidian_robots.partial_cmp(&other.obsidian_robots) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.clay.partial_cmp(&other.clay) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.clay_robots.partial_cmp(&other.clay_robots) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.ore.partial_cmp(&other.ore) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.ore_robots.partial_cmp(&other.ore_robots) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        self.remaining_time.partial_cmp(&other.remaining_time)
+    }
+}
+
+impl Ord for SearchState {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+fn best_geode_count(blueprint: &Blueprint, total_time: u32) -> usize {
+    let mut search_states = BinaryHeap::new();
+    search_states.push(SearchState {
+        ore: 0,
+        ore_robots: 1,
+        clay: 0,
+        clay_robots: 0,
+        obsidian: 0,
+        obsidian_robots: 0,
+        geodes: 0,
+        geode_robots: 0,
+        remaining_time: total_time,
+    });
 
     let mut seen_states = HashSet::new();
     let mut terminal_states = Vec::new();
     while !search_states.is_empty() {
-        let (state, time) = search_states.pop_front().unwrap();
+        let state = search_states.pop().unwrap();
 
-        if time == 24 {
+        if state.remaining_time == 0 {
             //println!("{} / {}", state.geodes, search_states.len());
             terminal_states.push(state);
-            continue;
+            break;
         }
 
         //println!("{}: {}", state.time, search_states.len());
@@ -89,6 +162,7 @@ fn best_geode_count(blueprint: &Blueprint) -> usize {
         new_state.ore += new_state.ore_robots;
         new_state.obsidian += new_state.obsidian_robots;
         new_state.geodes += new_state.geode_robots;
+        new_state.remaining_time -= 1;
         let new_state = new_state;
 
         if state.ore >= blueprint.geode_robot_cost.0
@@ -100,7 +174,7 @@ fn best_geode_count(blueprint: &Blueprint) -> usize {
             new_state.geode_robots += 1;
 
             if seen_states.insert(new_state.clone()) {
-                search_states.push_back((new_state, time + 1));
+                search_states.push(new_state);
             }
         }
 
@@ -113,7 +187,7 @@ fn best_geode_count(blueprint: &Blueprint) -> usize {
             new_state.obsidian_robots += 1;
 
             if seen_states.insert(new_state.clone()) {
-                search_states.push_back((new_state, time + 1));
+                search_states.push(new_state);
             }
         }
 
@@ -123,7 +197,7 @@ fn best_geode_count(blueprint: &Blueprint) -> usize {
             new_state.clay_robots += 1;
 
             if seen_states.insert(new_state.clone()) {
-                search_states.push_back((new_state, time + 1));
+                search_states.push(new_state);
             }
         }
 
@@ -133,12 +207,12 @@ fn best_geode_count(blueprint: &Blueprint) -> usize {
             new_state.ore_robots += 1;
 
             if seen_states.insert(new_state.clone()) {
-                search_states.push_back((new_state, time + 1));
+                search_states.push(new_state);
             }
         }
 
         if seen_states.insert(new_state.clone()) {
-            search_states.push_back((new_state, time + 1));
+            search_states.push(new_state);
         }
     }
 
