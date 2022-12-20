@@ -17,7 +17,7 @@ fn main() {
     let file = File::open(&args.data_file).expect("Failed to open file");
     let reader = BufReader::new(file);
 
-    let mut values: Vec<(usize, i32)> = reader
+    let values: Vec<(usize, i32)> = reader
         .lines()
         .enumerate()
         .map(|(index, line)| {
@@ -30,6 +30,23 @@ fn main() {
         })
         .collect();
 
+    let part1 = move_values(&mut values.clone());
+
+    println!("Part 1: {}", part1);
+
+    let modulo_scale: i32 = 811589153 % (values.len() - 1) as i32;
+    let mut part2_values: Vec<(usize, i32)> =
+        values.iter().map(|v| (v.0, v.1 * modulo_scale)).collect();
+    let mut part2 = 0;
+    for _ in 0..10 {
+        part2 = move_values(&mut part2_values) as i64;
+    }
+
+    part2 = (part2 / modulo_scale as i64) * 811589153;
+    println!("Part 2: {}", part2);
+}
+
+fn move_values(values: &mut Vec<(usize, i32)>) -> i32 {
     for i in 0..=values.iter().max_by_key(|v| v.0).unwrap().0 {
         let i = values.iter().enumerate().find(|(_, v)| v.0 == i).unwrap().0;
         let value = values[i];
@@ -44,9 +61,7 @@ fn main() {
     }
 
     let zero_index = values.iter().enumerate().find(|(_, v)| v.1 == 0).unwrap().0;
-    let sum_of_offset_values = values[(zero_index + 1000) % values.len()].1
+    values[(zero_index + 1000) % values.len()].1
         + values[(zero_index + 2000) % values.len()].1
-        + values[(zero_index + 3000) % values.len()].1;
-
-    println!("Part 1: {}", sum_of_offset_values);
+        + values[(zero_index + 3000) % values.len()].1
 }
