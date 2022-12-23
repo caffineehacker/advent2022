@@ -1,8 +1,9 @@
 use clap::Parser;
+use console::Term;
 use std::{
     collections::HashSet,
     fs::File,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
 };
 
 #[derive(Parser, Debug)]
@@ -12,6 +13,8 @@ struct Args {
     data_file: String,
     #[arg(long)]
     debug: bool,
+    #[arg(long)]
+    tui: bool,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
@@ -22,6 +25,16 @@ struct Elf {
 
 fn main() {
     let args = Args::parse();
+
+    let mut term = if args.tui {
+        let mut term = console::Term::buffered_stdout();
+        term.clear_screen();
+        term.hide_cursor();
+        term.flush();
+        Some(term)
+    } else {
+        None
+    };
 
     let file = File::open(&args.data_file).expect("Failed to open file");
     let reader = BufReader::new(file);
@@ -42,6 +55,8 @@ fn main() {
         .flatten()
         .collect();
 
+    let mut part1 = None;
+    let mut part2 = None;
     let mut round = 0;
     loop {
         if args.debug {
@@ -152,16 +167,17 @@ fn main() {
         }
 
         if elf_proposals.is_empty() {
-            println!(
-                "Part 2: Static configuration happend after {} rounds",
-                round + 1
-            );
+            part2 = Some(round + 1);
+            if args.tui {
+                tui_board(&elves, &mut term.as_mut().unwrap(), part1, part2, round);
+            } else {
+                println!(
+                    "Part 2: Static configuration happend after {} rounds",
+                    round + 1
+                );
+            }
 
             break;
-        }
-
-        if args.debug {
-            print_board(&elves);
         }
 
         if round == 9 {
@@ -173,7 +189,16 @@ fn main() {
             let max_y = elves.iter().map(|e| e.y).max().unwrap();
 
             let empty_squares = (max_x + 1 - min_x) * (max_y + 1 - min_y) - elves.len() as i32;
-            println!("Part 1: {}", empty_squares);
+            if !args.tui || args.debug {
+                println!("Part 1: {}", empty_squares);
+            }
+            part1 = Some(empty_squares);
+        }
+
+        if args.debug {
+            print_board(&elves);
+        } else if args.tui {
+            tui_board(&elves, &mut term.as_mut().unwrap(), part1, part2, round);
         }
 
         round += 1;
@@ -200,4 +225,54 @@ fn print_board(elves: &Vec<Elf>) {
         }
         print!("\n");
     }
+}
+
+fn tui_board(
+    elves: &Vec<Elf>,
+    term: &mut Term,
+    part1: Option<i32>,
+    part2: Option<i32>,
+    round: i32,
+) {
+    let min_x = elves.iter().map(|e| e.x).min().unwrap();
+    let max_x = elves.iter().map(|e| e.x).max().unwrap();
+    let min_y = elves.iter().map(|e| e.y).min().unwrap();
+    let max_y = elves.iter().map(|e| e.y).max().unwrap();
+
+    let (height, width) = term.size();
+
+    term.move_cursor_to(0, 0);
+    term.clear_line();
+    term.write_line(&format!(
+        "Round: {}  Map: {}, {} to {}, {}       Part 1: {}             Part 2: {}",
+        round + 1,
+        min_x,
+        min_y,
+        max_x,
+        max_y,
+        part1.map(|p| p.to_string()).unwrap_or("".to_string()),
+        part2.map(|p| p.to_string()).unwrap_or("".to_string())
+    ));
+    term.move_cursor_to(0, 1);
+
+    for y in 0..=(max_y - min_y) {
+        if y >= height as i32 - 1 {
+            break;
+        }
+        term.move_cursor_to(0, y as usize + 1);
+        let y = y + min_y;
+        for x in 0..=(max_x - min_x) {
+            if x >= width as i32 - 1 {
+                break;
+            }
+            let x = x + min_x;
+            if elves.iter().any(|e| e.x == x && e.y == y) {
+                term.write(b"#");
+            } else {
+                term.write(b".");
+            }
+        }
+    }
+
+    term.flush();
 }
