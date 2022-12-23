@@ -42,7 +42,8 @@ fn main() {
         .flatten()
         .collect();
 
-    for round in 0..10 {
+    let mut round = 0;
+    loop {
         if args.debug {
             println!("Round {}", round);
         }
@@ -150,20 +151,33 @@ fn main() {
             e.1.y = e.0 .1;
         }
 
+        if elf_proposals.is_empty() {
+            println!(
+                "Part 2: Static configuration happend after {} rounds",
+                round + 1
+            );
+
+            break;
+        }
+
         if args.debug {
             print_board(&elves);
         }
+
+        if round == 9 {
+            // The final bit is finding the rectangle containing all elves
+            // The number of empty squares in the rectangle will be W*H - elves
+            let min_x = elves.iter().map(|e| e.x).min().unwrap();
+            let max_x = elves.iter().map(|e| e.x).max().unwrap();
+            let min_y = elves.iter().map(|e| e.y).min().unwrap();
+            let max_y = elves.iter().map(|e| e.y).max().unwrap();
+
+            let empty_squares = (max_x + 1 - min_x) * (max_y + 1 - min_y) - elves.len() as i32;
+            println!("Part 1: {}", empty_squares);
+        }
+
+        round += 1;
     }
-
-    // The final bit is finding the rectangle containing all elves
-    // The number of empty squares in the rectangle will be W*H - elves
-    let min_x = elves.iter().map(|e| e.x).min().unwrap();
-    let max_x = elves.iter().map(|e| e.x).max().unwrap();
-    let min_y = elves.iter().map(|e| e.y).min().unwrap();
-    let max_y = elves.iter().map(|e| e.y).max().unwrap();
-
-    let empty_squares = (max_x + 1 - min_x) * (max_y + 1 - min_y) - elves.len() as i32;
-    println!("Part 1: {}", empty_squares);
 }
 
 fn print_board(elves: &Vec<Elf>) {
