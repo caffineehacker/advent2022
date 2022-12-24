@@ -22,22 +22,31 @@ struct Blizzard {
     direction_y: i32,
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 struct SearchState {
     x: i32,
     y: i32,
     step_number: i32,
-    goal_x: i32,
-    goal_y: i32,
+    goals: Vec<(i32, i32)>,
 }
 
 impl PartialOrd for SearchState {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         // We want the comparison to be based on the number of steps to the destination
-        let self_steps_to_goal =
-            self.step_number + (self.goal_x - self.x).abs() + (self.goal_y - self.y).abs();
-        let other_steps_to_goal =
-            other.step_number + (other.goal_x - other.x).abs() + (other.goal_y - other.y).abs();
+        let mut self_steps_to_goal = self.step_number;
+        let mut last_position = (self.x, self.y);
+        for goal in self.goals.iter() {
+            self_steps_to_goal +=
+                (goal.0 - last_position.0).abs() + (goal.1 - last_position.1).abs();
+            last_position = *goal;
+        }
+        let mut other_steps_to_goal = other.step_number;
+        last_position = (other.x, other.y);
+        for goal in other.goals.iter() {
+            other_steps_to_goal +=
+                (goal.0 - last_position.0).abs() + (goal.1 - last_position.1).abs();
+            last_position = *goal;
+        }
 
         match self_steps_to_goal.partial_cmp(&other_steps_to_goal) {
             Some(core::cmp::Ordering::Equal) => {}
@@ -56,11 +65,7 @@ impl PartialOrd for SearchState {
             Some(core::cmp::Ordering::Equal) => {}
             ord => return ord,
         }
-        match self.goal_x.partial_cmp(&other.goal_x) {
-            Some(core::cmp::Ordering::Equal) => {}
-            ord => return ord,
-        }
-        self.goal_y.partial_cmp(&other.goal_y)
+        self.goals.partial_cmp(&other.goals)
     }
 }
 
@@ -126,13 +131,54 @@ fn main() {
         .flatten()
         .collect();
 
+    let part1 = find_best_path(
+        (1, 0),
+        vec![(width as i32 - 2, height as i32 - 1)],
+        width,
+        height,
+        &blizzards,
+        &args,
+        0,
+    );
+    println!("Part 1: {}", part1);
+
+    let mut part2 = part1;
+    part2 = find_best_path(
+        (width as i32 - 2, height as i32 - 1),
+        vec![(1, 0)],
+        width,
+        height,
+        &blizzards,
+        &args,
+        part2,
+    );
+    part2 = find_best_path(
+        (1, 0),
+        vec![(width as i32 - 2, height as i32 - 1)],
+        width,
+        height,
+        &blizzards,
+        &args,
+        part2,
+    );
+    println!("Part 2: {}", part2);
+}
+
+fn find_best_path(
+    starting_point: (i32, i32),
+    goals: Vec<(i32, i32)>,
+    width: usize,
+    height: usize,
+    blizzards: &Vec<Blizzard>,
+    args: &Args,
+    start_time: i32,
+) -> i32 {
     let mut states: BinaryHeap<Reverse<SearchState>> = BinaryHeap::new();
     states.push(Reverse(SearchState {
-        x: 1,
-        y: 0,
-        step_number: 0,
-        goal_x: width as i32 - 2,
-        goal_y: height as i32 - 1,
+        x: starting_point.0,
+        y: starting_point.1,
+        step_number: start_time,
+        goals: goals.clone(),
     }));
 
     let mut seen_states = HashSet::new();
@@ -174,6 +220,7 @@ fn main() {
                         + 1,
                 )
             })
+            .filter(|b| b.0.abs_diff(state.x) <= 1 && b.1.abs_diff(state.y) <= 1)
             .collect();
 
         if args.debug {
@@ -223,6 +270,9 @@ fn main() {
             if state.y == 0 && x != 1 {
                 continue;
             }
+            if state.y == height as i32 - 1 && x != width as i32 - 2 {
+                continue;
+            }
             if !blizzard_locations.contains(&(x, state.y)) {
                 let mut state = state.clone();
                 state.x = x;
@@ -244,19 +294,34 @@ fn main() {
                 continue;
             }
 
-            if y == height as i32 - 1 && state.x == width as i32 - 2 {
-                println!("Part 1: {}", state.step_number + 1);
-                break 'search;
-            }
-
             if !blizzard_locations.contains(&(state.x, y)) {
                 let mut state = state.clone();
                 state.y = y;
                 state.step_number += 1;
+
+                if state.x == state.goals[0].0 && state.y == state.goals[0].1 {
+                    println!(
+                        "Goal ({}, {}) hit at {} steps",
+                        state.x, state.y, state.step_number
+                    );
+                    // When reaching a goal we can clear all other states since they won't have reached the goal
+                    states.clear();
+                    seen_states.clear();
+                    state.goals.remove(0);
+                    if state.goals.is_empty() {
+                        return state.step_number;
+                    }
+
+                    states.push(Reverse(state));
+                    continue 'search;
+                }
+
                 states.push(Reverse(state));
             } else if args.debug {
                 println!("Blizzard will be at {}, {}", state.x, y);
             }
         }
     }
+
+    -1
 }
